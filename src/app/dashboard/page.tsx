@@ -6,13 +6,16 @@ import { useSettings, isValidApiKey } from "@/hooks/use-settings";
 import { useHistory } from "@/hooks/use-history";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
-import { Key, Trash2, Eye, EyeOff, Clock, ExternalLink, Shield, ArrowLeft } from "lucide-react";
+import { CodeBlock } from "@/components/code-block";
+import { Key, Trash2, Eye, EyeOff, Clock, ExternalLink, Shield, ArrowLeft, Download, X, FileCode } from "lucide-react";
 import Link from "next/link";
+import type { GenerationResult } from "@/types";
 
 export default function Dashboard() {
   const { data: session, status: authStatus } = useSession();
   const { apiKey, maskedKey, hasKey, loaded, saveApiKey, clearApiKey } = useSettings();
-  const { entries, clearHistory } = useHistory();
+  const { entries, getOutput, clearHistory } = useHistory();
+  const [viewingOutput, setViewingOutput] = useState<{ entry: typeof entries[0]; output: GenerationResult } | null>(null);
 
   const [keyInput, setKeyInput] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -76,6 +79,31 @@ export default function Dashboard() {
   const formatDate = (ts: number) => {
     const d = new Date(ts);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const handleViewOutput = (entry: typeof entries[0]) => {
+    const output = getOutput(entry.id);
+    if (output) {
+      setViewingOutput({ entry, output });
+    }
+  };
+
+  const handleRedownload = async (entry: typeof entries[0]) => {
+    const output = getOutput(entry.id);
+    if (!output) return;
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    for (const [path, content] of Object.entries(output.files)) {
+      zip.file(path, content);
+    }
+    zip.file("claude_desktop_config.json", JSON.stringify(output.config, null, 2));
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${output.metadata.name}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -261,6 +289,27 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="ml-3 flex shrink-0 items-center gap-2">
+                    {entry.hasOutput && (
+                      <>
+                        <button
+                          onClick={() => handleViewOutput(entry)}
+                          className="flex items-center gap-1 rounded-[5px] px-2 py-1 text-[9px] font-medium transition-colors"
+                          style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
+                          title="View generated code"
+                        >
+                          <FileCode size={10} />
+                          View
+                        </button>
+                        <button
+                          onClick={() => handleRedownload(entry)}
+                          className="flex items-center gap-1 rounded-[5px] px-2 py-1 text-[9px] font-medium transition-colors"
+                          style={{ border: "1px solid var(--accent-border)", color: "var(--accent)" }}
+                          title="Re-download ZIP"
+                        >
+                          <Download size={10} />
+                        </button>
+                      </>
+                    )}
                     <span className="text-[10px] text-[--text-tertiary]">
                       {formatDate(entry.timestamp)}
                     </span>
@@ -279,6 +328,80 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {/* Output Viewer Modal */}
+      {viewingOutput && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => setViewingOutput(null)}
+        >
+          <div
+            className="relative w-full max-w-[800px] max-h-[85vh] overflow-hidden rounded-[14px] flex flex-col"
+            style={{ background: "var(--bg-primary)", border: "1px solid var(--border-default)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+              <div>
+                <h3 className="text-sm font-semibold">{viewingOutput.entry.apiName}</h3>
+                <p className="text-[11px] text-[--text-tertiary]">
+                  {viewingOutput.output.metadata.tools_count} tools, {viewingOutput.output.metadata.auth_type.replace("_", " ")} auth
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleRedownload(viewingOutput.entry)}
+                  className="flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[11px] font-semibold"
+                  style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-dark))", color: "var(--bg-primary)" }}
+                >
+                  <Download size={12} /> Download ZIP
+                </button>
+                <button
+                  onClick={() => setViewingOutput(null)}
+                  className="rounded-[6px] p-1.5 text-[--text-tertiary] transition-colors hover:text-[--text-primary]"
+                  style={{ border: "1px solid var(--border-subtle)" }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* File tabs */}
+            <div className="flex gap-0.5 overflow-x-auto px-5 pt-3" style={{ background: "rgba(255,255,255,0.01)" }}>
+              {[...Object.keys(viewingOutput.output.files), "claude_desktop_config.json"].map((filename) => (
+                <button
+                  key={filename}
+                  onClick={() => {
+                    // Use a data attribute to track active file in the modal
+                    const modal = document.getElementById("output-viewer-code");
+                    if (modal) modal.setAttribute("data-file", filename);
+                    // Force re-render by updating state
+                    setViewingOutput({ ...viewingOutput });
+                  }}
+                  className="shrink-0 rounded-t-[6px] px-3 py-1.5 text-[10px] font-medium transition-colors"
+                  style={{
+                    color: "var(--text-secondary)",
+                    borderBottom: "1px solid transparent",
+                  }}
+                >
+                  {filename}
+                </button>
+              ))}
+            </div>
+
+            {/* Code viewer */}
+            <div className="flex-1 overflow-auto px-5 pb-5 pt-2">
+              <CodeBlock
+                code={viewingOutput.output.files["src/index.ts"] || Object.values(viewingOutput.output.files)[0] || ""}
+                lang="typescript"
+                filename={Object.keys(viewingOutput.output.files).find(f => f.includes("index")) || Object.keys(viewingOutput.output.files)[0] || ""}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

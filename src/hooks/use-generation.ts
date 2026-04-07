@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { GenerationState, SSEEvent } from "@/types";
+import type { GenerationState, SSEEvent, DetectedEndpoint, OutputLanguage, AnalyzeResult } from "@/types";
 
 const INITIAL_STATE: GenerationState = {
   status: "idle",
@@ -9,20 +9,71 @@ const INITIAL_STATE: GenerationState = {
   stepLabel: "",
   result: null,
   error: null,
+  analyzedEndpoints: null,
 };
 
 export function useGeneration() {
   const [state, setState] = useState<GenerationState>(INITIAL_STATE);
+  const [cachedUrl, setCachedUrl] = useState("");
 
-  const generate = useCallback(async (rawUrl: string, apiKey?: string) => {
+  const analyze = useCallback(async (rawUrl: string, apiKey?: string) => {
     const url = rawUrl.trim();
-    setState({ status: "generating", step: 0, stepLabel: "Starting...", result: null, error: null });
+    setCachedUrl(url);
+    setState({ status: "generating", step: 1, stepLabel: "Fetching & analyzing docs...", result: null, error: null, analyzedEndpoints: null });
+
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, ...(apiKey?.trim() ? { apiKey: apiKey.trim() } : {}) }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Analysis failed" }));
+        setState((prev) => ({ ...prev, status: "error", error: errorData.error || `HTTP ${res.status}` }));
+        return;
+      }
+
+      const data: AnalyzeResult = await res.json();
+      setState({
+        status: "selecting",
+        step: 2,
+        stepLabel: `Found ${data.endpoints.length} endpoints`,
+        result: null,
+        error: null,
+        analyzedEndpoints: data.endpoints,
+      });
+    } catch (err) {
+      setState((prev) => ({ ...prev, status: "error", error: err instanceof Error ? err.message : "Network error" }));
+    }
+  }, []);
+
+  const generate = useCallback(async (
+    rawUrl: string,
+    apiKey?: string,
+    language: OutputLanguage = "typescript",
+    selectedEndpoints?: string[]
+  ) => {
+    const url = rawUrl.trim() || cachedUrl;
+    setState((prev) => ({
+      ...prev,
+      status: "generating",
+      step: 2,
+      stepLabel: "Generating server...",
+      result: null,
+      error: null,
+    }));
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, ...(apiKey?.trim() ? { apiKey: apiKey.trim() } : {}) }),
+        body: JSON.stringify({
+          url,
+          ...(apiKey?.trim() ? { apiKey: apiKey.trim() } : {}),
+          language,
+          ...(selectedEndpoints?.length ? { selectedEndpoints } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -59,7 +110,7 @@ export function useGeneration() {
                 setState((prev) => ({ ...prev, step: event.step, stepLabel: event.label }));
                 break;
               case "complete":
-                setState({ status: "complete", step: 4, stepLabel: "Ready", result: event.data, error: null });
+                setState((prev) => ({ ...prev, status: "complete", step: 4, stepLabel: "Ready", result: event.data }));
                 break;
               case "error":
                 setState((prev) => ({ ...prev, status: "error", error: event.message }));
@@ -73,9 +124,9 @@ export function useGeneration() {
     } catch (err) {
       setState((prev) => ({ ...prev, status: "error", error: err instanceof Error ? err.message : "Network error" }));
     }
-  }, []);
+  }, [cachedUrl]);
 
   const reset = useCallback(() => setState(INITIAL_STATE), []);
 
-  return { ...state, generate, reset };
+  return { ...state, analyze, generate, reset };
 }

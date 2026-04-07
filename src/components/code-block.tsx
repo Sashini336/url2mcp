@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Maximize2, Minimize2 } from "lucide-react";
 
 interface CodeBlockProps {
   code: string;
@@ -16,7 +16,7 @@ function getHighlighter() {
     highlighterPromise = import("shiki").then(({ createHighlighter }) =>
       createHighlighter({
         themes: ["material-theme-darker"],
-        langs: ["typescript", "json"],
+        langs: ["typescript", "json", "python", "toml", "markdown"],
       })
     );
   }
@@ -25,12 +25,13 @@ function getHighlighter() {
 
 export function CodeBlock({ code, lang, filename }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [html, setHtml] = useState<string>("");
 
   useEffect(() => {
     getHighlighter().then((highlighter) => {
       const result = highlighter.codeToHtml(code, {
-        lang: lang === "json" ? "json" : "typescript",
+        lang: ["json", "python", "toml", "markdown"].includes(lang) ? lang : "typescript",
         theme: "material-theme-darker",
       });
       setHtml(result);
@@ -57,20 +58,34 @@ export function CodeBlock({ code, lang, filename }: CodeBlockProps) {
           </div>
           <span className="ml-1.5 font-mono text-[11px] text-[--text-tertiary]">{filename}</span>
         </div>
-        <button
-          onClick={doCopy}
-          className="flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 font-mono text-[11px] transition-colors"
-          style={{
-            border: "1px solid var(--border-default)",
-            background: "rgba(255,255,255,0.05)",
-            color: copied ? "var(--accent)" : "var(--text-secondary)",
-          }}
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? "Copied!" : "Copy"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 font-mono text-[11px] transition-colors"
+            style={{
+              border: "1px solid var(--border-default)",
+              background: "rgba(255,255,255,0.05)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+          <button
+            onClick={doCopy}
+            className="flex items-center gap-1.5 rounded-[6px] px-2.5 py-1 font-mono text-[11px] transition-colors"
+            style={{
+              border: "1px solid var(--border-default)",
+              background: "rgba(255,255,255,0.05)",
+              color: copied ? "var(--accent)" : "var(--text-secondary)",
+            }}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
       </div>
-      <div className="max-h-[360px] overflow-auto p-4" style={{ background: "var(--bg-secondary)" }}>
+      <div className={`${expanded ? "max-h-[80vh]" : "max-h-[360px]"} overflow-auto p-4 transition-all`} style={{ background: "var(--bg-secondary)" }}>
         {html ? (
           <div
             className="font-mono text-[11px] leading-[1.7] [&_pre]:!bg-transparent [&_pre]:!p-0"

@@ -1,28 +1,53 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSession, signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { Nav } from "@/components/nav";
 import { Hero } from "@/components/hero";
 import { SocialProof } from "@/components/social-proof";
 import { GenerationOutput } from "@/components/generation-output";
 import { PipelineSection } from "@/components/pipeline-section";
 import { FeaturesSection } from "@/components/features-section";
+import { PricingSection } from "@/components/pricing-section";
+import { FAQSection } from "@/components/faq-section";
 import { SupportSection } from "@/components/support-section";
 import { Footer } from "@/components/footer";
 import { useGeneration } from "@/hooks/use-generation";
 import { useSettings } from "@/hooks/use-settings";
 import { useHistory } from "@/hooks/use-history";
+import type { OutputLanguage } from "@/types";
 
 export default function Home() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
+  const searchParams = useSearchParams();
   const [url, setUrl] = useState("");
   const { apiKey, loaded: settingsLoaded } = useSettings();
   const [localApiKey, setLocalApiKey] = useState("");
   const { data: session } = useSession();
-  const { status, step, stepLabel, result, error, generate } = useGeneration();
+  const { status, step, stepLabel, result, error, analyzedEndpoints, analyze, generate, reset } = useGeneration();
   const { addEntry } = useHistory();
   const outputRef = useRef<HTMLDivElement>(null);
   const savedRef = useRef(false);
+  const urlParamLoaded = useRef(false);
+
+  // Load URL from query parameter (from gallery links)
+  useEffect(() => {
+    if (!urlParamLoaded.current) {
+      const urlParam = searchParams.get("url");
+      if (urlParam) {
+        setUrl(urlParam);
+      }
+      urlParamLoaded.current = true;
+    }
+  }, [searchParams]);
 
   // Sync localStorage key into local state on load
   useEffect(() => {
@@ -40,7 +65,7 @@ export default function Home() {
         apiName: result.metadata.name,
         toolsCount: result.metadata.tools_count,
         authType: result.metadata.auth_type,
-      });
+      }, result);
     }
     if (status !== "complete") {
       savedRef.current = false;
@@ -53,7 +78,16 @@ export default function Home() {
       signIn("github");
       return;
     }
-    generate(url, localApiKey || undefined);
+    // Phase 1: Analyze docs and detect endpoints
+    analyze(url, localApiKey || undefined);
+    setTimeout(() => {
+      outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+  };
+
+  const handleGenerateWithSelection = (selectedEndpoints: string[], language: OutputLanguage) => {
+    // Phase 2: Generate with selected endpoints and language
+    generate(url, localApiKey || undefined, language, selectedEndpoints);
     setTimeout(() => {
       outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
@@ -78,10 +112,19 @@ export default function Home() {
           stepLabel={stepLabel}
           result={result}
           error={error}
+          analyzedEndpoints={analyzedEndpoints}
+          onGenerateWithSelection={handleGenerateWithSelection}
+          onReset={() => {
+            reset();
+            setUrl("");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
         />
       </div>
       <PipelineSection />
       <FeaturesSection />
+      <PricingSection />
+      <FAQSection />
       <SupportSection />
       <Footer />
     </div>

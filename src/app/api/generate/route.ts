@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let body: { url?: string; apiKey?: string };
+  let body: { url?: string; apiKey?: string; language?: string; selectedEndpoints?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { url, apiKey } = body;
+  const { url, apiKey, language, selectedEndpoints } = body;
+  const outputLang = language === "python" ? "python" : "typescript" as const;
   if (!url || typeof url !== "string") {
     return new Response(
       JSON.stringify({ error: "Missing required field: url" }),
@@ -81,7 +82,9 @@ export async function POST(req: NextRequest) {
         const result = await generateMCPServer(
           docs.content,
           docs.title,
-          usingOwnKey ? trimmedKey! : undefined
+          usingOwnKey ? trimmedKey! : undefined,
+          outputLang,
+          selectedEndpoints
         );
 
         send({ type: "complete", data: result });

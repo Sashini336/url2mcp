@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Globe, ArrowRight, Loader2, Key, ChevronDown } from "lucide-react";
+import { Globe, ArrowRight, Loader2, Key, Infinity, Shield } from "lucide-react";
 
 interface GeneratorInputProps {
   url: string;
@@ -19,8 +19,9 @@ const TRY_APIS = [
 ];
 
 export function GeneratorInput({ url, onUrlChange, onGenerate, generating, apiKey, onApiKeyChange }: GeneratorInputProps) {
-  const [showByok, setShowByok] = useState(false);
+  const [useOwnKey, setUseOwnKey] = useState(false);
   const canGenerate = url.trim().length > 0 && !generating;
+  const hasKey = apiKey.trim().length > 0;
 
   return (
     <div className="w-full max-w-[440px]">
@@ -77,39 +78,85 @@ export function GeneratorInput({ url, onUrlChange, onGenerate, generating, apiKe
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowByok(!showByok)}
-          className="flex items-center gap-1 text-[10px] text-[--text-tertiary] transition-colors hover:text-[--text-secondary]"
-        >
-          <Key size={10} />
-          <span>BYOK</span>
-          <ChevronDown size={10} className={`transition-transform ${showByok ? "rotate-180" : ""}`} />
-        </button>
       </div>
 
-      {showByok && (
-        <div
-          className="mt-2 rounded-[8px] p-2.5"
-          style={{
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid var(--border-subtle)",
-          }}
+      {/* BYOK toggle — always visible */}
+      <div
+        className="mt-3 rounded-[10px] p-3 transition-all duration-200"
+        style={{
+          background: useOwnKey ? "rgba(0,255,136,0.03)" : "rgba(255,255,255,0.015)",
+          border: useOwnKey ? "1px solid rgba(0,255,136,0.12)" : "1px solid var(--border-subtle)",
+        }}
+      >
+        <button
+          onClick={() => setUseOwnKey(!useOwnKey)}
+          className="flex w-full items-center justify-between"
         >
           <div className="flex items-center gap-2">
-            <Key size={12} className="shrink-0 text-[--text-tertiary]" />
-            <input
-              type="password"
-              placeholder="sk-ant-... (your Anthropic API key)"
-              value={apiKey}
-              onChange={(e) => onApiKeyChange(e.target.value)}
-              className="flex-1 bg-transparent font-mono text-[11px] text-[--text-primary] placeholder:text-[--text-tertiary] outline-none"
-            />
+            <Key size={13} className={useOwnKey ? "text-[--accent]" : "text-[--text-tertiary]"} />
+            <span className="text-[11.5px] font-semibold" style={{ color: useOwnKey ? "var(--text-primary)" : "var(--text-secondary)" }}>
+              Bring Your Own Key
+            </span>
+            {hasKey && useOwnKey && (
+              <span className="rounded-[3px] px-1.5 py-px font-mono text-[8px] font-semibold" style={{ background: "var(--accent-bg)", border: "1px solid var(--accent-border)", color: "var(--accent)" }}>
+                ACTIVE
+              </span>
+            )}
           </div>
-          <p className="mt-1.5 text-[9px] text-[--text-tertiary]">
-            Optional. Use your own key for unlimited generations. Never stored.
-          </p>
-        </div>
-      )}
+          <div className="flex items-center gap-2">
+            {!useOwnKey && (
+              <span className="flex items-center gap-1 text-[9px] text-[--text-tertiary]">
+                <Infinity size={9} />
+                Unlimited generations
+              </span>
+            )}
+            {/* Toggle switch */}
+            <div
+              className="relative h-[18px] w-[32px] rounded-full transition-all duration-200"
+              style={{
+                background: useOwnKey ? "rgba(0,255,136,0.25)" : "rgba(255,255,255,0.08)",
+                border: `1px solid ${useOwnKey ? "rgba(0,255,136,0.3)" : "rgba(255,255,255,0.1)"}`,
+              }}
+            >
+              <div
+                className="absolute top-[2px] h-[12px] w-[12px] rounded-full transition-all duration-200"
+                style={{
+                  left: useOwnKey ? "16px" : "2px",
+                  background: useOwnKey ? "var(--accent)" : "rgba(255,255,255,0.3)",
+                }}
+              />
+            </div>
+          </div>
+        </button>
+
+        {useOwnKey && (
+          <div className="mt-3">
+            <div
+              className="flex items-center gap-2 rounded-[8px] px-2.5 py-2"
+              style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-subtle)" }}
+            >
+              <Key size={11} className="shrink-0 text-[--text-tertiary]" />
+              <input
+                type="password"
+                placeholder="sk-ant-... (your Anthropic API key)"
+                value={apiKey}
+                onChange={(e) => onApiKeyChange(e.target.value)}
+                className="flex-1 bg-transparent font-mono text-[11px] text-[--text-primary] placeholder:text-[--text-tertiary] outline-none"
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              <span className="flex items-center gap-1 text-[9px] text-[--text-tertiary]">
+                <Shield size={9} />
+                Never stored on our servers — sent directly to Anthropic
+              </span>
+              <span className="flex items-center gap-1 text-[9px] text-[--accent]">
+                <Infinity size={9} />
+                Unlimited
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
